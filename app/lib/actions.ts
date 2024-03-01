@@ -1,8 +1,10 @@
 'use server';
-import {z} from 'zod';
-import {sql} from '@vercel/postgres';
-import {revalidatePath} from "next/cache";
-import {redirect} from "next/navigation";
+import { z } from 'zod';
+import { sql } from '@vercel/postgres';
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { signIn } from '@/auth';
+import { AuthError } from 'next-auth';
 
 export type State = {
 	errors?: {
@@ -21,7 +23,7 @@ const FormSchema = z.object({
 	}),
 	amount: z.coerce
 		.number()
-		.gt(0, {message: 'Please, pick an amount greater than $0.'}),
+		.gt(0, { message: 'Please, pick an amount greater than $0.' }),
 	status: z.enum(['pending', 'paid'], {
 		invalid_type_error: 'Please select a status.'
 	}),
@@ -64,7 +66,7 @@ const UpdateInvoice = FormSchema.omit({ id: true, date: true });
 
 export async function updateInvoice(id: string, formData: FormData) {
 	try {
-		const {customerId, amount, status} = UpdateInvoice.parse({
+		const { customerId, amount, status } = UpdateInvoice.parse({
 			customerId: formData.get('customerId'),
 			amount: formData.get('amount'),
 			status: formData.get('status'),
@@ -94,5 +96,24 @@ export async function deleteInvoice(id: string) {
 		return { message: 'Deleted Invoice.' };
 	} catch (error) {
 		return { message: 'Database Error: Failed to Delete Invoice.' };
+	}
+}
+
+export async function authenticate(
+	prevState: string | undefined,
+	formData: FormData,
+) {
+	try {
+		await signIn('credentials', formData);
+	} catch (error) {
+		if (error instanceof AuthError) {
+			switch (error.type) {
+				case 'CredentialsSignin':
+					return 'Invalid credentials.';
+				default:
+					return 'Something went wrong.';
+			}
+		}
+		throw error;
 	}
 }
